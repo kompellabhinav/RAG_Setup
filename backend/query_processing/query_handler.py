@@ -10,50 +10,46 @@ def process_query(query, top_k=5, similarity_threshold=SIMILARITY_THRESHOLD):
     # Generate query embedding
     query_embedding = get_embedding(query)
     if query_embedding is None:
-        print("Failed to generate embedding for the query.")
-        return
+        return {"error": "Failed to generate embedding for the query."}
 
     # Retrieve documents from Pinecone
     results = retrieve_documents(query_embedding)
     if not results['matches']:
-        print("No documents were retrieved.")
-        return
+        return {"error": "No documents were retrieved."}
 
     # Check if the top score meets the threshold
     if is_score_above_threshold(results, threshold=similarity_threshold):
-        print("Documents are relevant. Proceeding with the response.")
-        # Here you would proceed to generate an answer using the retrieved documents
-        # For demonstration, we'll print the documents
+        response_data = {
+            "status": "relevant",
+            "documents": []
+        }
         for match in results['matches']:
-            print(f"Score: {match['score']}")
-            print(f"Topic: {match['metadata'].get('Topic', 'N/A')}")
-            print(f"URL: {match['metadata'].get('Video URL', 'N/A')}")
-            print(f"Description: {match['metadata'].get('Description', 'N/A')}\n")
+            document = {
+                "score": match['score'],
+                "topic": match['metadata'].get('Topic', 'N/A'),
+                "url": match['metadata'].get('Video URL', 'N/A'),
+                "description": match['metadata'].get('Description', 'N/A')
+            }
+            response_data["documents"].append(document)
+        return response_data
     else:
-        print("Documents are not sufficiently relevant. Generating follow-up questions.")
         prompt = generate_follow_up_questions(results, query)
         follow_up_questions = get_follow_up_questions(prompt)
-        print("Please help us better understand your query by answering the following questions:")
-        print(follow_up_questions)
-        # Optionally, get user input to refine the query
+        response_data = {
+            "status": "not_relevant",
+            "follow_up_questions": follow_up_questions
+        }
+        return response_data
 
 def retrieve_documents(query_embedding):
     pc = pinecone_init()
     index = pc.Index(index_name)
     # Query Pinecone index
     results = index.query(
-    vector=query_embedding,
-    top_k=5,
-    include_metadata=True
+        vector=query_embedding,
+        top_k=5,
+        include_metadata=True
     )
-
-    # Display the results
-    for match in results['matches']:
-        print(f"Score: {match['score']}")
-        print(f"Topic: {match['metadata']['Topic']}")
-        print(f"URL: {match['metadata']['Video URL']}")
-        print(f"Description: {match['metadata']['Description']}\n")
-    
     return results
 
 def is_score_above_threshold(results, threshold=SIMILARITY_THRESHOLD):
@@ -78,14 +74,15 @@ def generate_follow_up_questions(documents, original_query, num_questions=3):
     return prompt
 
 def get_follow_up_questions(prompt):
+    global messages
     messages.append({"role": "user", "content": prompt})
-    response = openai.chat.completions.create(
+    response = openai.ChatCompletion.create(
         model='gpt-4',  # Or another suitable model
         messages=messages,
         max_tokens=150,
         n=1,
         temperature=0.7,
     )
-    questions = response.choices[0].message.content
+    questions = response.choices[0].message['content']
     messages.append({"role": "assistant", "content": questions})
     return questions

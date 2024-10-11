@@ -1,6 +1,7 @@
 from embeddings.embedding_service import get_embedding
 from pinecone_service.pinecone_utils import query_pinecone
 from config.__init__ import pinecone_init, openai
+import logging
 
 SIMILARITY_THRESHOLD = 0.6
 messages = []
@@ -74,15 +75,15 @@ def generate_follow_up_questions(documents, original_query, num_questions=3):
     return prompt
 
 def get_follow_up_questions(prompt):
-    global messages
     messages.append({"role": "user", "content": prompt})
-    response = openai.ChatCompletion.create(
+    logging.info(f"messages: {messages}")
+    response = openai.chat.completions.create(
         model='gpt-4',  # Or another suitable model
         messages=messages,
         max_tokens=150,
         n=1,
         temperature=0.7,
     )
-    questions = response.choices[0].message['content']
+    questions = response.choices[0].message.content
     messages.append({"role": "assistant", "content": questions})
     return questions

@@ -96,6 +96,15 @@ def get_follow_up_questions(prompt):
     return questions
 
 def evaluate_response(generated_response, expected_response):
+    """_summary_
+
+    Args:
+        generated_response (_type_): models response
+        expected_response (_type_): human evaluated response
+
+    Returns:
+        _type_: _description_
+    """
     # BLEU score calculation
     bleu_score = sentence_bleu([expected_response.split()], generated_response.split())
     

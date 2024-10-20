@@ -1,29 +1,33 @@
-import logging
 from embeddings.embedding_service import get_embedding
 from pinecone_service.pinecone_utils import query_pinecone
 from config.__init__ import pinecone_init, openai
+import logging
 
+# for evaluation purposes
 from nltk.translate.bleu_score import sentence_bleu
-from sklearn.metrics import precision_score
+from sklearn.metrics import precision_score, recall_score, f1_score
 
-SIMILARITY_THRESHOLD = 0.6
+SIMILARITY_THRESHOLD = 0.8
 messages = []
 index_name = "rag-project"
 
 def process_query(query, top_k=5, similarity_threshold=SIMILARITY_THRESHOLD):
+    # Generate query embedding
     query_embedding = get_embedding(query)
     if query_embedding is None:
         return {"error": "Failed to generate embedding for the query."}
 
+    # Retrieve documents from Pinecone
     results = retrieve_documents(query_embedding)
     if not results['matches']:
         return {"error": "No documents were retrieved."}
 
+    # Check if the top score meets the threshold
     if is_score_above_threshold(results, threshold=similarity_threshold):
         response_data = {
             "status": "relevant",
             "documents": []
-        }
+        }       
         for match in results['matches']:
             document = {
                 "score": match['score'],
@@ -36,6 +40,7 @@ def process_query(query, top_k=5, similarity_threshold=SIMILARITY_THRESHOLD):
     else:
         prompt = generate_follow_up_questions(results, query)
         follow_up_questions = get_follow_up_questions(prompt)
+        
 
         response_data = {
             "status": "not_relevant",
@@ -46,6 +51,7 @@ def process_query(query, top_k=5, similarity_threshold=SIMILARITY_THRESHOLD):
 def retrieve_documents(query_embedding):
     pc = pinecone_init()
     index = pc.Index(index_name)
+    # Query Pinecone index
     results = index.query(
         vector=query_embedding,
         top_k=5,
@@ -74,18 +80,11 @@ def generate_follow_up_questions(documents, original_query, num_questions=1):
     )
     return prompt
 
-def summerize_messages(messages):
-    return " ".join([msg['content'] for msg in messages[-5:] ] )
-
 def get_follow_up_questions(prompt):
-
-    summary=summerize_messages(messages)
-    combined_prompt=f"{summary}\n user's query:{prompt}"
-
-    messages.append({"role": "user", "content": combined_prompt})
+    messages.append({"role": "user", "content": prompt})
     logging.info(f"messages: {messages}")
     response = openai.chat.completions.create(
-        model='gpt-4',
+        model='gpt-4',  # Or another suitable model
         messages=messages,
         max_tokens=150,
         n=1,
@@ -95,58 +94,70 @@ def get_follow_up_questions(prompt):
     messages.append({"role": "assistant", "content": questions})
     return questions
 
-def evaluate_response(generated_response, expected_response):
-    """_summary_
 
-    Args:
-        generated_response (_type_): models response
-        expected_response (_type_): human evaluated response
+def evaluate_response(test_queries, expected_responses):
+    bleu_scores = []
+    precision_scores = []
+    recall_scores = []
+    f1_scores = []
+    faithful_scores = []
 
-    Returns:
-        _type_: _description_
-    """
-    # BLEU score calculation
-    bleu_score = sentence_bleu([expected_response.split()], generated_response.split())
-    
-    # Precision calculation
-    expected_tokens = set(expected_response.split())
-    generated_tokens = set(generated_response.split())
-    true_positives = len(expected_tokens.intersection(generated_tokens))
-    precision = true_positives / len(generated_tokens) if len(generated_tokens) > 0 else 0
-    
-    # Faithfulness evaluation
-    faithful_score = 1 if bleu_score > 0.5 else 0
-
-    return bleu_score, precision, faithful_score
-
-def terminal_interaction():
-    while True:
-        # Get the user input from the terminal
-        query = input("\nEnter your query (or type 'exit' to quit): ")
-        
-        if query.lower() == 'exit':
-            print("Exiting the application.")
-            break
-        
-        # Process the query
+    for query, expected in zip(test_queries, expected_responses):
         response = process_query(query)
+
+        if response.get("error"):
+            print(f"Error processing query '{query}': {response['error']}")
+            continue  # Skip this query and continue with the next one
+
+        if response["status"] == "not_relevant":
+            print(f"Query didn't retrieve any relevant document.")
+            continue
+
+        generated_response = " ".join([doc['description'] for doc in response["documents"]])
+
+        # BLEU score evaluation
+        bleu_score = sentence_bleu([expected.split()], generated_response.split())
+        bleu_scores.append(bleu_score)
+
+        # Token-based precision, recall, and F1-Score
+        expected_tokens = set(expected.split())
+        generated_tokens = set(generated_response.split())
+        true_positives = len(expected_tokens.intersection(generated_tokens))
         
-        if 'error' in response:
-            print(f"Error: {response['error']}")
-        elif response['status'] == 'relevant':
-            print("\nDocuments retrieved:")
-            generated_response = " ".join([doc['description'] for doc in response['documents']])
-            for doc in response['documents']:
-                print(f"Score: {doc['score']}, Topic: {doc['topic']}, URL: {doc['url']}, Description: {doc['description']}")
-            
-            # Evaluation
-            expected_response = input("\nEnter the expected response to evaluate: ")
-            bleu, precision, faithful = evaluate_response(generated_response, expected_response)
-            print(f"\nEvaluation Results:\nBLEU Score: {bleu}\nPrecision: {precision}\nFaithfulness: {faithful}")
-        else:
-            print("\nThe documents are not sufficiently relevant.")
-            print(f"Follow-up questions: {response['follow_up_questions']}")
+        precision = true_positives / len(generated_tokens) if len(generated_tokens) > 0 else 0
+        recall = true_positives / len(expected_tokens) if len(expected_tokens) > 0 else 0
+        f1 = (2 * precision * recall) / (precision + recall) if (precision + recall) > 0 else 0
 
+        precision_scores.append(precision)
+        recall_scores.append(recall)
+        f1_scores.append(f1)
+
+        # Faithfulness check (arbitrary condition)
+        faithful_score = 1 if bleu_score > 0.5 else 0
+        faithful_scores.append(faithful_score)
+
+    # Average metrics
+    avg_bleu = sum(bleu_scores) / len(bleu_scores) if bleu_scores else 0
+    avg_precision = sum(precision_scores) / len(precision_scores) if precision_scores else 0
+    avg_recall = sum(recall_scores) / len(recall_scores) if recall_scores else 0
+    avg_f1 = sum(f1_scores) / len(f1_scores) if f1_scores else 0
+    avg_faithfulness = sum(faithful_scores) / len(faithful_scores) if faithful_scores else 0
+
+    # Print evaluation results
+    print(f"Average BLEU score: {avg_bleu}")
+    print(f"Average Precision: {avg_precision}")
+    print(f"Average Recall: {avg_recall}")
+    print(f"Average F1-Score: {avg_f1}")
+    print(f"Average Faithfulness: {avg_faithfulness}")
+
+# Prepare the dataset
+test_queries = [
+    "What is the importance of skin-to-skin contact for babies, and what should I observe during this time?"
+]
+expected_responses = [
+    "Skin-to-skin contact is crucial for newborns as it helps regulate their body temperature, supports breastfeeding, and enhances bonding. During this time, observe the baby’s breathing, skin color, and temperature. The baby should appear calm, with normal breathing and a steady heartbeat."
+]
+
+# Let's run the evaluation
 if __name__ == "__main__":
-    terminal_interaction()
-
+    evaluate_response(test_queries, expected_responses)

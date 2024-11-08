@@ -11,7 +11,7 @@ from sklearn.metrics import precision_score, recall_score, f1_score
 from langchain_ollama import OllamaLLM  # Importing the Llama model class
 
 # Initialize the Llama model
-llama_model = OllamaLLM(model="llama3.1")  # Specify your desired Llama model
+llama_model = OllamaLLM(model="llama3.2:latest")  # Specify your desired Llama model
 
 SIMILARITY_THRESHOLD = 0.8
 messages = []

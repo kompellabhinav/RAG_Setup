@@ -1,11 +1,17 @@
 from embeddings.embedding_service import get_embedding
 from pinecone_service.pinecone_utils import query_pinecone
-from config.__init__ import pinecone_init, openai
+from config.__init__ import pinecone_init  # Removed openai import
 import logging
 
-# for evaluation purposes
+# For evaluation purposes
 from nltk.translate.bleu_score import sentence_bleu
 from sklearn.metrics import precision_score, recall_score, f1_score
+
+# Import Llama model (assuming you have a library for it)
+from langchain_ollama import OllamaLLM  # Importing the Llama model class
+
+# Initialize the Llama model
+llama_model = OllamaLLM(model="llama3.1")  # Specify your desired Llama model
 
 SIMILARITY_THRESHOLD = 0.8
 messages = []
@@ -40,7 +46,6 @@ def process_query(query, top_k=5, similarity_threshold=SIMILARITY_THRESHOLD):
     else:
         prompt = generate_follow_up_questions(results, query)
         follow_up_questions = get_follow_up_questions(prompt)
-        
 
         response_data = {
             "status": "not_relevant",
@@ -83,17 +88,14 @@ def generate_follow_up_questions(documents, original_query, num_questions=1):
 def get_follow_up_questions(prompt):
     messages.append({"role": "user", "content": prompt})
     logging.info(f"messages: {messages}")
-    response = openai.chat.completions.create(
-        model='gpt-4',  # Or another suitable model
-        messages=messages,
-        max_tokens=150,
-        n=1,
-        temperature=0.7,
-    )
-    questions = response.choices[0].message.content
-    messages.append({"role": "assistant", "content": questions})
-    return questions
 
+    # Use Llama model to generate follow-up questions
+    response = llama_model.invoke(prompt)  # Call invoke method on llama_model
+    questions = response  # Adjust based on how your model returns data
+    
+    messages.append({"role": "assistant", "content": questions})
+    
+    return questions
 
 def evaluate_response(test_queries, expected_responses):
     bleu_scores = []

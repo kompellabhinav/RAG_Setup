@@ -1,6 +1,6 @@
 import openai
 
-def get_embedding(text, model="text-embedding-3-small"):
+def get_embedding(text, model="text-embedding-3-large"):
      response = openai.embeddings.create(
          input=text,
          model=model

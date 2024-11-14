@@ -1,6 +1,7 @@
 from embeddings.embedding_service import get_embedding
 from pinecone_service.pinecone_utils import query_pinecone
 from config.__init__ import pinecone_init  # Removed openai import
+import matplotlib.pyplot as plt
 import logging
 
 # For evaluation purposes
@@ -152,6 +153,19 @@ def evaluate_response(test_queries, expected_responses):
     print(f"Average F1-Score: {avg_f1}")
     print(f"Average Faithfulness: {avg_faithfulness}")
 
+    #ploting the evaluation metrics
+    metrics=['BLEU','Precision','Recall','F1-Score','Faithfulness']
+    values=[avg_bleu,avg_precision,avg_recall,avg_f1,avg_faithfulness]
+
+    plt.figure()
+    plt.bar(metrics,values,color=['blue','green','orange','red','purple'])
+    plt.xlabel('Metrics')
+    plt.ylabel('Score')
+    plt.title('Model Evaluation')
+    plt.ylim(0,1)
+    plt.show()
+
+
 # Prepare the dataset
 test_queries = [
     "What is the importance of skin-to-skin contact for babies, and what should I observe during this time?"
@@ -159,6 +173,7 @@ test_queries = [
 expected_responses = [
     "Skin-to-skin contact is crucial for newborns as it helps regulate their body temperature, supports breastfeeding, and enhances bonding. During this time, observe the baby’s breathing, skin color, and temperature. The baby should appear calm, with normal breathing and a steady heartbeat."
 ]
+
 
 # Let's run the evaluation
 if __name__ == "__main__":

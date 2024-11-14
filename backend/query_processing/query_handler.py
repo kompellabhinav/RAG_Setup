@@ -1,11 +1,16 @@
 from embeddings.embedding_service import get_embedding
 from pinecone_service.pinecone_utils import query_pinecone
-from config.__init__ import pinecone_init, openai
+from config.__init__ import pinecone_init
+from langchain_ollama import OllamaLLM
 import logging
+
 
 SIMILARITY_THRESHOLD = 0.6
 messages = []
 index_name = "rag-project"
+
+#the model
+llama_model=OllamaLLM(model="llama3.1")
 
 def process_query(query, top_k=5, similarity_threshold=SIMILARITY_THRESHOLD):
     # Generate query embedding
@@ -77,13 +82,12 @@ def generate_follow_up_questions(documents, original_query, num_questions=3):
 def get_follow_up_questions(prompt):
     messages.append({"role": "user", "content": prompt})
     logging.info(f"messages: {messages}")
-    response = openai.chat.completions.create(
-        model='gpt-4',  # Or another suitable model
-        messages=messages,
-        max_tokens=150,
-        n=1,
-        temperature=0.7,
-    )
-    questions = response.choices[0].message.content
+    
+
+    response=llama_model.invoke(prompt)
+    questions=response
+    
+#    questions = response.choices[0].message.content  # Adjust based on actual response structure
     messages.append({"role": "assistant", "content": questions})
+    
     return questions

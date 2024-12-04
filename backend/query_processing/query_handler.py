@@ -4,7 +4,7 @@ from config.__init__ import pinecone_init
 from langchain_ollama import OllamaLLM
 import logging
 
-
+SIMILARITY_LOWER_BOUND = 0.3
 SIMILARITY_THRESHOLD = 0.6
 messages = []
 index_name = "rag-project"
@@ -23,29 +23,46 @@ def process_query(query, top_k=5, similarity_threshold=SIMILARITY_THRESHOLD):
     if not results['matches']:
         return {"error": "No documents were retrieved."}
 
+    # Filter out results with a score less than 0.3
+    filtered_matches = [match for match in results['matches'] if match['score'] >= 0.3]
+
+    # If no results remain after filtering, return NULL status
+    if not filtered_matches:
+        return {
+            "status": "NULL"
+        }
+
     # Check if the top score meets the threshold
-    if is_score_above_threshold(results, threshold=similarity_threshold):
+    if filtered_matches[0]['score'] < SIMILARITY_LOWER_BOUND:
+        return {
+            "status": "NULL"
+        }
+
+    if is_score_above_threshold({"matches": filtered_matches}, threshold=similarity_threshold):
         response_data = {
             "status": "relevant",
             "documents": []
         }
-        for match in results['matches']:
-            document = {
-                "score": match['score'],
-                "topic": match['metadata'].get('Topic', 'N/A'),
-                "url": match['metadata'].get('Video URL', 'N/A'),
-                "description": match['metadata'].get('Description', 'N/A')
-            }
-            response_data["documents"].append(document)
-        return response_data
     else:
-        prompt = generate_follow_up_questions(results, query)
+        prompt = generate_follow_up_questions({"matches": filtered_matches}, query)
         follow_up_questions = get_follow_up_questions(prompt)
         response_data = {
             "status": "not_relevant",
-            "follow_up_questions": follow_up_questions
+            "follow_up_questions": follow_up_questions,
+            "documents": []
         }
-        return response_data
+
+    for match in filtered_matches:
+        document = {
+            "score": match['score'],
+            "topic": match['metadata'].get('Topic', 'N/A'),
+            "url": match['metadata'].get('Video URL', 'N/A'),
+            "description": match['metadata'].get('Description', 'N/A')
+        }
+        response_data["documents"].append(document)
+
+    return response_data
+
 
 def retrieve_documents(query_embedding):
     pc = pinecone_init()
@@ -75,7 +92,10 @@ def generate_follow_up_questions(documents, original_query, num_questions=3):
         "The retrieved documents are not sufficiently relevant.\n"
         "Based on the following documents, generate follow-up questions to help clarify the user's intent.\n\n" +
         "\n".join(document_texts) +
-        f"\n\nPlease provide {num_questions} follow-up questions."
+        f"\n\nPlease provide {num_questions} follow-up questions." +
+        "Parse the followup questions in a way that is easy to parse as JSON. Give all questions as an array in JSON" +
+        "Return only the JSON part. NOTHING else. Do not even mention it is JSON" +
+        "Return thhe question with a key named 'question'. The structure should be an array of {'question': each question}"
     )
     return prompt
 

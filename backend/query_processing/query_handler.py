@@ -3,14 +3,28 @@ from pinecone_service.pinecone_utils import query_pinecone
 from config.__init__ import pinecone_init
 from langchain_ollama import OllamaLLM
 import logging
+import json
 
 SIMILARITY_LOWER_BOUND = 0.3
 SIMILARITY_THRESHOLD = 0.6
 messages = []
 index_name = "rag-project"
 
-#the model
-llama_model=OllamaLLM(model="llama3.1")
+# Initialize the Ollama LLM with a system prompt to enforce JSON array output
+system_prompt = """
+You are a helpful  4assistant. When generating follow-up questions, please provide them in the following JSON array format:
+
+[
+  {"question": "First question"},
+  {"question": "Second question"},
+  {"question": "Third question"}
+]
+
+Return only the JSON array and nothing else.
+"""
+
+# The model with the system prompt
+llama_model = OllamaLLM(model="llama3.1", system_prompt=system_prompt)
 
 def process_query(query, top_k=5, similarity_threshold=SIMILARITY_THRESHOLD):
     # Generate query embedding
@@ -23,8 +37,8 @@ def process_query(query, top_k=5, similarity_threshold=SIMILARITY_THRESHOLD):
     if not results['matches']:
         return {"error": "No documents were retrieved."}
 
-    # Filter out results with a score less than 0.3
-    filtered_matches = [match for match in results['matches'] if match['score'] >= 0.3]
+    # Filter out results with a score less than SIMILARITY_LOWER_BOUND
+    filtered_matches = [match for match in results['matches'] if match['score'] >= SIMILARITY_LOWER_BOUND]
 
     # If no results remain after filtering, return NULL status
     if not filtered_matches:
@@ -63,7 +77,6 @@ def process_query(query, top_k=5, similarity_threshold=SIMILARITY_THRESHOLD):
 
     return response_data
 
-
 def retrieve_documents(query_embedding):
     pc = pinecone_init()
     index = pc.Index(index_name)
@@ -92,10 +105,8 @@ def generate_follow_up_questions(documents, original_query, num_questions=3):
         "The retrieved documents are not sufficiently relevant.\n"
         "Based on the following documents, generate follow-up questions to help clarify the user's intent.\n\n" +
         "\n".join(document_texts) +
-        f"\n\nPlease provide {num_questions} follow-up questions." +
-        "Parse the followup questions in a way that is easy to parse as JSON. Give all questions as an array in JSON" +
-        "Return only the JSON part. NOTHING else. Do not even mention it is JSON" +
-        "Return thhe question with a key named 'question'. The structure should be an array of {'question': each question}"
+        f"\n\nPlease provide {num_questions} follow-up questions.\n"
+        "Remember to return the questions as a JSON array in the specified format."
     )
     return prompt
 
@@ -103,11 +114,13 @@ def get_follow_up_questions(prompt):
     messages.append({"role": "user", "content": prompt})
     logging.info(f"messages: {messages}")
     
-
-    response=llama_model.invoke(prompt)
-    questions=response
+    # Invoke the model with the prompt
+    response = llama_model.invoke(prompt)
     
-#    questions = response.choices[0].message.content  # Adjust based on actual response structure
-    messages.append({"role": "assistant", "content": questions})
+    # Log the raw response
+    print(response)
+    logging.info(f"Raw response from model: {response}")
+    questions = response
     
+    messages.append({"role": "assistant", "content": response})
     return questions

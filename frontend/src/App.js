@@ -6,6 +6,7 @@ function App() {
   const [response, setResponse] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+  const [submitCount, setSubmitCount] = useState(0); // Track the number of submissions
 
   const submitQuery = async () => {
     if (!query.trim()) {
@@ -16,11 +17,13 @@ function App() {
     setLoading(true);
     setError(null);
     setResponse(null);
+    setSubmitCount((prevCount) => prevCount + 1); // Increment submission count
 
     try {
       const res = await axios.post('http://127.0.0.1:5000/api/query', {
         query: query,
       });
+      console.log("data")
       console.log(res.data);
       setResponse(res.data);
     } catch (err) {
@@ -32,9 +35,9 @@ function App() {
   };
 
   const extractJson = (text) => {
-    console.log(text)
+    console.log(text);
     const jsonMatch = text.match(/\[\s*{[\s\S]*?}\s*\]/); // Match content between backticks
-    console.log(jsonMatch)
+    console.log(jsonMatch);
     if (jsonMatch) {
       try {
         console.log("parsed");
@@ -71,55 +74,61 @@ function App() {
           </button>
         </div>
         {error && <div className="text-red-500 mb-4">{error}</div>}
-        {response && (
+        {submitCount > 3 ? (
           <div className="mt-4">
-            {response.status === 'NULL' && (
-              <div>
-                <h2>No relevant data</h2>
-              </div>
-            )}
-            {response.status === 'not_relevant' && (
-              <div>
-                <h2 className="text-xl font-semibold mb-2">Follow-Up Questions:</h2>
-                {followUpQuestions ? (
-                  <ul className="pl-5">
-                    {followUpQuestions.map((item, index) => (
-                      <li key={index} className="mb-2 list-disc">
-                        {item.question}
-                      </li>
-                    ))}
-                  </ul>
-                ) : (
-                  <p>Could not parse follow-up questions.</p>
-                )}
-              </div>
-            )}
-            {(response.status === 'relevant' || response.status === 'not_relevant') && (
-              <div>
-                <h2 className="text-xl font-semibold mb-2">Relevant Documents:</h2>
-                {response.documents.map((doc, index) => (
-                  <div key={index} className="mb-4 p-4 border rounded">
-                    <h3 className="font-bold">Document {index + 1}</h3>
-                    <p>
-                      <strong>Score:</strong> {doc.score}
-                    </p>
-                    <p>
-                      <strong>Topic:</strong> {doc.topic}
-                    </p>
-                    <p>
-                      <strong>URL:</strong>{' '}
-                      <a href={doc.url} target="_blank" rel="noopener noreferrer" className="text-blue-500 underline">
-                        {doc.url}
-                      </a>
-                    </p>
-                    <p>
-                      <strong>Description:</strong> {doc.description}
-                    </p>
-                  </div>
-                ))}
-              </div>
-            )}
+            <h2>No relevant data</h2>
           </div>
+        ) : (
+          response && (
+            <div className="mt-4">
+              {response.status === 'NULL' && (
+                <div>
+                  <h2>No relevant data</h2>
+                </div>
+              )}
+              {response.status === 'not_relevant' && (
+                <div>
+                  <h2 className="text-xl font-semibold mb-2">Select one of the following questions to query:</h2>
+                  {followUpQuestions ? (
+                    <ul className="pl-5">
+                      {followUpQuestions.map((item, index) => (
+                        <li key={index} className="mb-2 list-disc">
+                          {item.question}
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <p>Could not parse follow-up questions.</p>
+                  )}
+                </div>
+              )}
+              {(response.status === 'relevant' || response.status === 'not_relevant') && (
+                <div>
+                  <h2 className="text-xl font-semibold mb-2">Relevant Documents:</h2>
+                  {response.documents.map((doc, index) => (
+                    <div key={index} className="mb-4 p-4 border rounded">
+                      <h3 className="font-bold">Document {index + 1}</h3>
+                      <p>
+                        <strong>Score:</strong> {doc.score}
+                      </p>
+                      <p>
+                        <strong>Topic:</strong> {doc.topic}
+                      </p>
+                      <p>
+                        <strong>URL:</strong>{' '}
+                        <a href={doc.url} target="_blank" rel="noopener noreferrer" className="text-blue-500 underline">
+                          {doc.url}
+                        </a>
+                      </p>
+                      <p>
+                        <strong>Description:</strong> {doc.description}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )
         )}
       </div>
     </div>

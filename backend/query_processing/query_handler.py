@@ -20,7 +20,7 @@ You are a helpful  4assistant. When generating follow-up questions, please provi
   {"question": "Third question"}
 ]
 
-Return only the JSON array and nothing else.
+Return only the JSON array and nothing else. Follow this format strictly
 """
 
 # The model with the system prompt
@@ -70,7 +70,7 @@ def process_query(query, top_k=5, similarity_threshold=SIMILARITY_THRESHOLD):
         document = {
             "score": match['score'],
             "topic": match['metadata'].get('Topic', 'N/A'),
-            "url": match['metadata'].get('Video URL', 'N/A'),
+            "url": match['metadata'].get('URL', 'N/A'),
             "description": match['metadata'].get('Description', 'N/A')
         }
         response_data["documents"].append(document)
